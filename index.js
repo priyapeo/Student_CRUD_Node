@@ -1,46 +1,49 @@
 const http = require("http");
-const url = require("url");
+const fs = require("fs");
+const path = require("path");
 
 let students = [];
 let idCounter = 1;
 
+const getRequestBody = (req) => (callback) => {
+  let body = "";
+  req.on("data", (chunk) => (body += chunk));
+  req.on("end", () => {
+    try {
+      const parsed = body ? JSON.parse(body) : {};
+      callback(null, parsed);
+    } catch (err) {
+      callback(err);
+    }
+  });
+};
+
 const server = http.createServer((req, res) => {
-  // const parsedUrl = url.parse(req.url, true);
   const method = req.method;
-  const path = req.url;
+  const url = req.url; 
+  const getRequestBodyCurrying = getRequestBody(req);
 
   res.setHeader("Content-Type", "application/json");
 
-  const getRequestBody = (callback) => {
-    let body = "";
-    req.on("data", (chunk) => (body += chunk));
-    req.on("end", () => {
-      try {
-        const parsed = body ? JSON.parse(body) : {};
-        callback(null, parsed);
-      } catch (err) {
-        callback(err);
-      }
-    });
-  };
-
-  if (path === "/students" && method === "GET") {
+  if (url === "/students" && method === "GET") {
     res.writeHead(200);
     res.end(JSON.stringify(students));
-  } else if (path === "/students" && method === "POST") {
-    getRequestBody((err, data) => {
+
+  } else if (url === "/students" && method === "POST") {
+    getRequestBodyCurrying((err, data) => {
       if (err || !data.name) {
         res.writeHead(400);
         return res.end(JSON.stringify({ message: "Name is required" }));
       }
-      const student = { id: idCounter++, name: data.name };
+      const student = { id: idCounter++, name: data.name, image: null };
       students.push(student);
       res.writeHead(201);
       res.end(JSON.stringify(student));
     });
-  } else if (path.startsWith("/students/") && method === "PUT") {
-    const id = parseInt(path.split("/")[2]);
-    getRequestBody((err, data) => {
+
+  } else if (url.startsWith("/students/") && method === "PUT") {
+    const id = parseInt(url.split("/")[2]);
+    getRequestBodyCurrying((err, data) => {
       if (err || !data.name) {
         res.writeHead(400);
         return res.end(JSON.stringify({ message: "Name is required" }));
@@ -54,16 +57,41 @@ const server = http.createServer((req, res) => {
       res.writeHead(200);
       res.end(JSON.stringify(student));
     });
-  } else if (path.startsWith("/students/") && method === "DELETE") {
-    const id = parseInt(path.split("/")[2]);
-      const student = students.find((s) => s.id === id);
-      if (!student) {
-        res.writeHead(404);
-        return res.end(JSON.stringify({ message: "Student not found" }));
-      }
-    students.splice(student, 1);
+
+  } else if (url.startsWith("/students/") && method === "DELETE") {
+    const id = parseInt(url.split("/")[2]);
+    const index = students.findIndex((s) => s.id === id);
+    if (index === -1) {
+      res.writeHead(404);
+      return res.end(JSON.stringify({ message: "Student not found" }));
+    }
+    students.splice(index, 1);
     res.writeHead(200);
     res.end(JSON.stringify({ message: `Student ID ${id} deleted` }));
+
+  } else if (url.startsWith("/students/upload/") && method === "POST") {
+    const id = parseInt(url.split("/")[3]);
+    const student = students.find((s) => s.id === id);
+    if (!student) {
+      res.writeHead(404);
+      return res.end(JSON.stringify({ message: "Student not found" }));
+    }
+
+    const uploadDir = path.join(__dirname, "uploads");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir);
+    }
+
+    const filePath = path.join(uploadDir, `student-${id}.jpg`);
+    const fileStream = fs.createWriteStream(filePath);
+
+    req.pipe(fileStream);
+    req.on("end", () => {
+      student.image = filePath;
+      res.writeHead(200);
+      res.end(JSON.stringify({ message: "Image uploaded", student }));
+    });
+
   } else {
     res.writeHead(404);
     res.end(JSON.stringify({ message: "Route not found" }));
