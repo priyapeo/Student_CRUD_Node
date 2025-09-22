@@ -70,29 +70,49 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ message: `Student ID ${id} deleted` }));
 
   } else if (url.startsWith("/students/upload/") && method === "POST") {
-    const id = parseInt(url.split("/")[3]);
-    const student = students.find((s) => s.id === id);
-    if (!student) {
-      res.writeHead(404);
-      return res.end(JSON.stringify({ message: "Student not found" }));
+  const id = parseInt(url.split("/")[3]);
+  const student = students.find((s) => s.id === id);
+
+  if (!student) {
+    res.writeHead(404);
+    return res.end(JSON.stringify({ message: "Student not found" }));
+  }
+// app.post('/', (req, res) => {
+//   const filePath = path.join(__dirname, `/image.jpg`);
+//   const stream = fs.createWriteStream(filePath);
+
+//   stream.on('open', () => req.pipe(stream););
+// });
+
+  const uploadDir = path.join(__dirname, "uploads");
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+  }
+
+  const filePath = path.join(uploadDir, `student-${id}.jpg`);
+  const fileStream = fs.createWriteStream(filePath);
+
+  let hasData = false; 
+  req.on("data", (chunk) => {
+    if (chunk.length > 0) {
+      hasData = true;
+    }
+  });
+
+  req.pipe(fileStream);
+
+  req.on("end", () => {
+    if (!hasData) {
+      res.writeHead(400);
+      return res.end(JSON.stringify({ message: "No image uploaded" }));
     }
 
-    const uploadDir = path.join(__dirname, "uploads");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir);
-    }
-
-    const filePath = path.join(uploadDir, `student-${id}.jpg`);
-    const fileStream = fs.createWriteStream(filePath);
-
-    req.pipe(fileStream);
-    req.on("end", () => {
-      student.image = filePath;
-      res.writeHead(200);
-      res.end(JSON.stringify({ message: "Image uploaded", student }));
-    });
-
-  } else {
+    student.image = filePath;
+    res.writeHead(200);
+    res.end(JSON.stringify({ message: "Image uploaded", student }));
+  });
+}
+ else {
     res.writeHead(404);
     res.end(JSON.stringify({ message: "Route not found" }));
   }
