@@ -1,6 +1,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const formidable = require("formidable");
 
 let students = [];
 let idCounter = 1;
@@ -70,49 +71,38 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ message: `Student ID ${id} deleted` }));
 
   } else if (url.startsWith("/students/upload/") && method === "POST") {
-  const id = parseInt(url.split("/")[3]);
-  const student = students.find((s) => s.id === id);
+    const id = parseInt(url.split("/")[3]);
+    const student = students.find((s) => s.id === id);
 
-  if (!student) {
-    res.writeHead(404);
-    return res.end(JSON.stringify({ message: "Student not found" }));
-  }
-// app.post('/', (req, res) => {
-//   const filePath = path.join(__dirname, `/image.jpg`);
-//   const stream = fs.createWriteStream(filePath);
-
-//   stream.on('open', () => req.pipe(stream););
-// });
-
-  const uploadDir = path.join(__dirname, "uploads");
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
-  }
-
-  const filePath = path.join(uploadDir, `student-${id}.jpg`);
-  const fileStream = fs.createWriteStream(filePath);
-
-  let hasData = false; 
-  req.on("data", (chunk) => {
-    if (chunk.length > 0) {
-      hasData = true;
-    }
-  });
-
-  req.pipe(fileStream);
-
-  req.on("end", () => {
-    if (!hasData) {
-      res.writeHead(400);
-      return res.end(JSON.stringify({ message: "No image uploaded" }));
+    if (!student) {
+      res.writeHead(404);
+      return res.end(JSON.stringify({ message: "Student not found" }));
     }
 
-    student.image = filePath;
-    res.writeHead(200);
-    res.end(JSON.stringify({ message: "Image uploaded", student }));
-  });
-}
- else {
+    const uploadDir = path.join(__dirname, "uploads");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir);
+    }
+
+ const form = new formidable.IncomingForm({uploadDir: uploadDir});
+
+    form.parse(req, (err, fields, files) => {
+      if (err) {
+        res.writeHead(400);
+        return res.end(JSON.stringify({ message: "Error parsing form data" }));
+      }
+
+      if (!files.image) {
+        res.writeHead(400);
+        return res.end(JSON.stringify({ message: "No image uploaded" }));
+      }
+
+      student.image = files.image.filepath; 
+      res.writeHead(200);
+      res.end(JSON.stringify({ message: "Image uploaded", student }));
+    });
+
+  }else {
     res.writeHead(404);
     res.end(JSON.stringify({ message: "Route not found" }));
   }
